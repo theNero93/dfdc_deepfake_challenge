@@ -1,0 +1,16 @@
+
+weights/final_111_DeepFakeClassifier_tf_efficientnet_b7_ns_0_36
+
+weights/final_555_DeepFakeClassifier_tf_efficientnet_b7_ns_0_19
+
+weights/final_777_DeepFakeClassifier_tf_efficientnet_b7_ns_0_29
+
+weights/final_777_DeepFakeClassifier_tf_efficientnet_b7_ns_0_31
+
+weights/final_888_DeepFakeClassifier_tf_efficientnet_b7_ns_0_37
+
+weights/final_888_DeepFakeClassifier_tf_efficientnet_b7_ns_0_40
+
+weights/final_999_DeepFakeClassifier_tf_efficientnet_b7_ns_0_23
+
+*.pyc

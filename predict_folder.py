@@ -41,7 +41,7 @@ if __name__ == '__main__':
     print("Predicting {} videos".format(len(test_videos)))
     predictions = predict_on_video_set(face_extractor=face_extractor, input_size=input_size, models=models,
                                        strategy=strategy, frames_per_video=frames_per_video, videos=test_videos,
-                                       num_workers=6, test_dir=args.test_dir)
+                                       num_workers=1, test_dir=args.test_dir)
     submission_df = pd.DataFrame({"filename": test_videos, "label": predictions})
     submission_df.to_csv(args.output, index=False)
     print("Elapsed:", time.time() - stime)

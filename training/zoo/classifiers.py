@@ -6,7 +6,7 @@ from timm.models import skresnext50_32x4d
 from timm.models.dpn import dpn92, dpn131
 from timm.models.efficientnet import tf_efficientnet_b4_ns, tf_efficientnet_b3_ns, \
     tf_efficientnet_b5_ns, tf_efficientnet_b2_ns, tf_efficientnet_b6_ns, tf_efficientnet_b7_ns
-from timm.models.senet import seresnext50_32x4d
+from timm.models.senet import legacy_seresnext50_32x4d
 from torch import nn
 from torch.nn.modules.dropout import Dropout
 from torch.nn.modules.linear import Linear
@@ -63,7 +63,7 @@ encoder_params = {
     },
     "se50": {
         "features": 2048,
-        "init_op": partial(seresnext50_32x4d, pretrained=True)
+        "init_op": partial(legacy_seresnext50_32x4d, pretrained=True)
     },
     "sk50": {
         "features": 2048,
