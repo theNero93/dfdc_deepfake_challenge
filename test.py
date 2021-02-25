@@ -1,47 +1,19 @@
 import argparse
 import os
 import re
-import sys
-
-sys.path.append(os.getcwd())
 
 import numpy as np
 import torch
 from PIL import Image
 from albumentations import image_compression
-from facenet_pytorch.models.mtcnn import MTCNN
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from data.basic_dataset import BasicDataset
+from data.transforms import create_basic_transforms
 from kernel_utils import isotropically_resize_image, put_to_center, normalize_transform
-from training.zoo.classifiers import DeepFakeClassifier
-from src.util.dotdict import Dotdict
-from src.util.data.data_loader import load_subset
 from src.util.validate import calc_scores
-
-
-def get_opt():
-    opt = Dotdict()
-
-    opt.model = 'all'
-    opt.is_train = True
-    opt.pretrained = True
-    opt.checkpoints_dir = './out/checkpoints/faces'
-    opt.continue_train = True
-    opt.save_name = 'latest'
-    opt.name = 'knn'
-    # opt.dataset_path = './datasets/celeb-df-v2/images'
-    opt.dataset_path = './datasets/forensic/images'
-    opt.multiclass = False
-    opt.resize_interpolation = 'bilinear'
-    opt.load_size = -1
-    opt.train_split = 'train'
-    opt.train_size = 2500
-    opt.val_split = 'val'
-    opt.val_size = 100
-    opt.test_split = 'test'
-    opt.load_value = -1
-
-    return opt
+from training.zoo.classifiers import DeepFakeClassifier
 
 
 def extract_faces(detector, image):
@@ -104,7 +76,7 @@ def pred_on_image(models, detector, image, batch_size, input_size, strategy=np.m
                         preds.append(strategy(bpred))
                     return np.mean(preds)
     except Exception as e:
-       print("Prediction error on video %s: %s" % (0, str(e)))
+        print("Prediction error on video %s: %s" % (0, str(e)))
 
     return 0.5
 
@@ -123,24 +95,49 @@ def test(args):
         model.eval()
         del checkpoint
         models.append(model.half())
-    detector = MTCNN(margin=0, thresholds=[0.7, 0.8, 0.8], device="cuda")
 
-    opt = get_opt()
-    test_img, test_label = load_subset(opt, opt.test_split, opt.load_value)
+    normalize = {'mean': [0.485, 0.456, 0.406], 'std': [0.229, 0.224, 0.225]}
+    test_data = BasicDataset(root_dir=args.root_dir,
+                             processed_dir=args.processed_dir,
+                             crops_dir=args.crops_dir,
+                             split_csv=args.split_csv,
+                             seed=args.seed,
+                             normalize=normalize,
+                             transforms=create_basic_transforms(args.size),
+                             mode='test')
+    test_loader = DataLoader(test_data, batch_size=1)
+
     y_pred, y_true = [], []
-    for img, label in tqdm(zip(test_img, test_label), total=len(test_img)):
-        pred = pred_on_image(models, detector, img, frames_per_video, input_size)
-        y_pred.append(pred)
-        y_true.append(label)
+    for img, label in tqdm(test_loader):
+        with torch.no_grad():
+            preds = []
+            for model in models:
+                y_pred = model(img.cuda())
+                y_pred = torch.sigmoid(y_pred.squeeze())
+                bpred = y_pred.cpu().numpy()
+                preds.append(np.mean(bpred))
+            y_pred.append(np.mean(preds))
+            y_true.append(y_pred)
+
     acc, ap, auc = calc_scores(y_true, y_pred)[:3]
     print("Test: acc: {}; ap: {}; auc: {}".format(acc, ap, auc))
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Parameters for Training")
+    args = parser.add_argument
+    # Dataset Options
+    args("--root_dir", default='datasets/dfdc', help="root directory")
+    args('--processed_dir', default='processed', help='directory where the processed files are stored')
+    args('--crops_dir', default='crops', help='directory of the crops')
+    args('--split_csv', default='folds.csv', help='Split CSV Filename')
+    args('--seed', default=111, help='Random Seed')
+    args('--weights-dir', type=str, default="./src/baselines/dfdc_winner/weights",
+         help="path to directory with checkpoints")
+    args('--models', nargs='+', required=True, help="checkpoint files")
+    args('--size', default=380)
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser("Predict test fotos")
-    arg = parser.add_argument
-    arg('--weights-dir', type=str, default="./src/baselines/dfdc_winner/weights",
-        help="path to directory with checkpoints")
-    arg('--models', nargs='+', required=True, help="checkpoint files")
-    args = parser.parse_args()
-    test(args)
+    test(parse_args())
