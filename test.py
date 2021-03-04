@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from data.basic_dataset import BasicDataset
-from data.transforms import create_basic_transforms
+from src.model.transforms.transforms import create_basic_transforms
 from kernel_utils import isotropically_resize_image, put_to_center, normalize_transform
 from src.util.validate import calc_scores
 from training.zoo.classifiers import DeepFakeClassifier
