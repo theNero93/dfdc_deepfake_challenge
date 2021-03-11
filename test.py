@@ -1,6 +1,7 @@
 import argparse
 import os
 import re
+from os.path import join
 
 import numpy as np
 import torch
@@ -9,10 +10,10 @@ from albumentations import image_compression
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from data.basic_dataset import BasicDataset
-from src.model.transforms.transforms import create_basic_transforms
 from kernel_utils import isotropically_resize_image, put_to_center, normalize_transform
-from src.util.validate import calc_scores
+from src.data.basic_dataset import BasicDataset
+from src.model.transforms.transform_builder import create_basic_transforms
+from src.util.validate import calc_scores, save_pred_to_csv
 from training.zoo.classifiers import DeepFakeClassifier
 
 
@@ -97,7 +98,9 @@ def test(args):
         models.append(model.half())
 
     normalize = {'mean': [0.485, 0.456, 0.406], 'std': [0.229, 0.224, 0.225]}
-    test_data = BasicDataset(root_dir=args.root_dir,
+
+    dataset_dir = join(args.root_dir, args.dataset)
+    test_data = BasicDataset(root_dir=dataset_dir,
                              processed_dir=args.processed_dir,
                              crops_dir=args.crops_dir,
                              split_csv=args.split_csv,
@@ -108,34 +111,52 @@ def test(args):
     test_loader = DataLoader(test_data, batch_size=1)
 
     y_pred, y_true = [], []
-    for img, label in tqdm(test_loader):
+    i = 0
+    for img, label in tqdm(test_loader, total=5000):
         with torch.no_grad():
             preds = []
             for model in models:
-                y_pred = model(img.cuda())
-                y_pred = torch.sigmoid(y_pred.squeeze())
-                bpred = y_pred.cpu().numpy()
+                pred = model(img.cuda().half())
+                pred = torch.sigmoid(pred.squeeze())
+                bpred = pred.cpu().numpy()
                 preds.append(np.mean(bpred))
             y_pred.append(np.mean(preds))
-            y_true.append(y_pred)
+            y_true.append(label.item())
+            i += 1
+            if i > 5000:
+                break
 
-    acc, ap, auc = calc_scores(y_true, y_pred)[:3]
-    print("Test: acc: {}; ap: {}; auc: {}".format(acc, ap, auc))
+    acc, auc, loss = calc_scores(y_true, y_pred)[:3]
+    print("Test: acc: {}; auc: {}; loss: {}".format(acc, auc, loss))
+    if args.save_pred:
+        save_pred_to_csv(y_true, y_pred, args.name, args.dataset)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Parameters for Training")
     args = parser.add_argument
     # Dataset Options
-    args("--root_dir", default='datasets/dfdc', help="root directory")
+    models = ['final_111_DeepFakeClassifier_tf_efficientnet_b7_ns_0_36',
+              'final_555_DeepFakeClassifier_tf_efficientnet_b7_ns_0_19',
+              'final_777_DeepFakeClassifier_tf_efficientnet_b7_ns_0_29',
+              'final_777_DeepFakeClassifier_tf_efficientnet_b7_ns_0_31',
+              'final_888_DeepFakeClassifier_tf_efficientnet_b7_ns_0_37',
+              'final_888_DeepFakeClassifier_tf_efficientnet_b7_ns_0_40',
+              'final_999_DeepFakeClassifier_tf_efficientnet_b7_ns_0_23']
+
+    args("--root_dir", default='/bigssd/datasets', help="root directory")
+    args('--dataset', default='dfdc')
     args('--processed_dir', default='processed', help='directory where the processed files are stored')
     args('--crops_dir', default='crops', help='directory of the crops')
     args('--split_csv', default='folds.csv', help='Split CSV Filename')
     args('--seed', default=111, help='Random Seed')
     args('--weights-dir', type=str, default="./src/baselines/dfdc_winner/weights",
          help="path to directory with checkpoints")
-    args('--models', nargs='+', required=True, help="checkpoint files")
+    args('--models', default=models, nargs='+', help="checkpoint files")
     args('--size', default=380)
+
+    args('--name', default='bl_dfdc_winner')
+    args('--save_pred', default=True)
     return parser.parse_args()
 
 
